@@ -1,4 +1,5 @@
 import { Node } from "acorn";
+import { MACDOutput } from "technicalindicators/declarations/moving_averages/MACD";
 
 // start types for decltr platform
 export interface DecltrEvent {
@@ -346,6 +347,8 @@ export interface Indicators {
   assetPair: AssetPair;
   ticker: Ticker;
   RSI: Array<number>;
+  OHLC: Array<TOHLCVVC>;
+  MACD: Array<MACDOutput>;
 }
 
 export type OHLCDependent = boolean | undefined;

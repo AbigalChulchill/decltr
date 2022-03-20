@@ -1,8 +1,10 @@
+import fs from "fs";
+
 import compilerError, {
   addImplementationForIndicator,
   fixTypoForIndicator,
 } from "./compilerError";
-import { indicatorsPath } from "../env";
+import { indexPath, indicatorsPath } from "../env";
 import createHandler from "./createHandler";
 import getAppParams from "./getAppParams";
 import Import from "../Import";
@@ -20,7 +22,8 @@ const handler = async () => {
       process.exit(1);
     }
   });
-  await createHandler(appParams);
+  const handlerCode = createHandler(appParams);
+  await fs.promises.writeFile(indexPath, handlerCode, "utf-8");
 };
 
 export default handler;

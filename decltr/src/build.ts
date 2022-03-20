@@ -6,7 +6,9 @@ import archiver from "archiver";
 import handler from "./handler";
 import {
   indexPath,
-  serverfulPath,
+  envTarget,
+  serverfullPath,
+  serverlessPath,
   serverlessZipPath,
   tsconfigPath,
 } from "./env";
@@ -14,18 +16,20 @@ import {
 export const buildProduction = async () => {
   await handler();
 
+  const outfile = envTarget === "serverfull" ? serverfullPath : serverlessPath;
+
   await build({
     bundle: true,
     entryPoints: [indexPath],
+    external: ["aws-sdk"],
     format: "cjs",
     legalComments: "external",
     minify: true,
     minifyIdentifiers: true,
     minifySyntax: true,
     minifyWhitespace: true,
-    outfile: serverfulPath,
+    outfile,
     platform: "node",
-    sourcemap: "linked",
     target: "node14",
     treeShaking: true,
     tsconfig: tsconfigPath,
@@ -46,10 +50,8 @@ export const buildProduction = async () => {
 
     archive.pipe(output);
 
-    archive.append(fs.createReadStream(serverfulPath), { name: "index.js" });
+    archive.append(fs.createReadStream(outfile), { name: "index.js" });
 
     archive.finalize();
   });
 };
-
-buildProduction();

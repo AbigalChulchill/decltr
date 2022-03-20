@@ -1,5 +1,6 @@
-import axios from "axios";
-import { rsi } from "technicalindicators";
+import needle from "needle";
+import { rsi, macd } from "technicalindicators";
+import { MACDOutput } from "technicalindicators/declarations/moving_averages/MACD";
 
 import { TOHLCVVC } from "../types";
 
@@ -13,19 +14,41 @@ import {
   Ticker,
 } from "../types";
 
-export const OHLC: Indicator<TOHLCVVC[]> = async ({ pair }) => {
-  const url = "https://api.kraken.com/0/public/OHLC";
-  const params = { pair };
+export const assetPair: Indicator<AssetPair> = async ({ pair }) => {
+  const url = `https://api.kraken.com/0/public/AssetPairs?pair=${pair}`;
 
-  const { data } = await axios.get<KrakenOHLC>(url, { params });
+  const data = await needle("get", url).then(
+    (res) => res.body as KrakenAssetPair
+  );
+
+  if (data.error.length > 0) {
+    throw new Error(data.error.join(", "));
+  }
+
   return data.result[pair];
 };
 
 export const ticker: Indicator<Ticker> = async ({ pair }) => {
-  const url = "https://api.kraken.com/0/public/Ticker";
-  const params = { pair };
+  const url = `https://api.kraken.com/0/public/Ticker?pair=${pair}`;
 
-  const { data } = await axios.get<KrakenTicker>(url, { params });
+  const data = await needle("get", url).then((res) => res.body as KrakenTicker);
+
+  if (data.error.length > 0) {
+    throw new Error(data.error.join(", "));
+  }
+
+  return data.result[pair];
+};
+
+export const OHLC: Indicator<TOHLCVVC[]> = async ({ pair }) => {
+  const url = `https://api.kraken.com/0/public/OHLC?pair=${pair}`;
+
+  const data = await needle("get", url).then((res) => res.body as KrakenOHLC);
+
+  if (data.error.length > 0) {
+    throw new Error(data.error.join(", "));
+  }
+
   return data.result[pair];
 };
 
@@ -38,10 +61,15 @@ export const RSI: Indicator<Array<number>> = async (_, OHLC) => {
 // Indicate If There Are Any Dependencies
 export const RSI_OHLC: OHLCDependent = true;
 
-export const assetPair: Indicator<AssetPair> = async ({ pair }) => {
-  const url = "https://api.kraken.com/0/public/AssetPairs";
-  const params = { pair };
-
-  const { data } = await axios.get<KrakenAssetPair>(url, { params });
-  return data.result[pair];
+export const MACD: Indicator<Array<MACDOutput>> = async (_, OHLC) => {
+  return macd({
+    values: OHLC.map((TOHLCVVC) => parseFloat(TOHLCVVC[4])),
+    fastPeriod: 12,
+    slowPeriod: 26,
+    signalPeriod: 3,
+    SimpleMAOscillator: false,
+    SimpleMASignal: false,
+  });
 };
+
+export const MACD_OHLC: OHLCDependent = true;

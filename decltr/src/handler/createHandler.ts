@@ -1,69 +1,168 @@
-import fs from "fs";
-
 import {
-  indexPath,
+  AWS_SECRET_NAME,
+  AWS_SECRET_REGION,
   indicatorsPath,
+  envTarget,
   KRAKEN_API_KEY,
   KRAKEN_PRIVATE_KEY,
 } from "../env";
 
-const createHandler = async (appParams: Array<string>) => {
-  let handler = `
-  import App from '../src/App';
-  import { placeOrder } from '../decltr/src/index';
+const createHandler = (appParams: Array<string>): string => {
+  const getAPIKeysServerfull = `${JSON.stringify(
+    KRAKEN_API_KEY
+  )}, ${JSON.stringify(KRAKEN_PRIVATE_KEY)}`;
 
-  export const handler = async (event) => {
-    const order = App({}, event);
-    if (!order) {
-      return null;
-    }
-    return await placeOrder(order, "${KRAKEN_API_KEY}", "${KRAKEN_PRIVATE_KEY}");
+  const constantImports = `placeOrder${
+    envTarget === "serverless" ? ", useAWSSecret" : ""
+  }`;
+
+  const appImportLine = `import App from '../src/App';`;
+  let importDepsLine = `import { ${constantImports} } from '../decltr/src/index';`;
+  const handlerLine = `  export const handler = async (event) => {\ntry{`;
+  let callDepsLine = ``;
+  let indicatorsObjLine = ``;
+  let callAppLine = `const order = App({}, event);`;
+  const placeOrderLine = `if (!order) {
+    return null;
+  }
+  ${
+    envTarget === "serverless"
+      ? `const { KRAKEN_API_KEY, KRAKEN_PRIVATE_KEY } = await useAWSSecret(${JSON.stringify(
+          AWS_SECRET_NAME
+        )}, ${JSON.stringify(AWS_SECRET_REGION)})`
+      : ""
   };
-  `;
-  if (appParams.length > 0) {
-    const finalIndex = appParams.length - 1;
-    let needsOHLC = false;
+  return await placeOrder(order, ${
+    envTarget === "serverfull"
+      ? getAPIKeysServerfull
+      : "KRAKEN_API_KEY, KRAKEN_PRIVATE_KEY"
+  });
+  } catch (err) {
+    console.error(err.message);
+  }
+}`;
 
-    const parallelFetches = appParams.reduce((prev, appParam, i) => {
-      const isOHLCDep = require(indicatorsPath)[appParam + "_OHLC"];
-      needsOHLC = isOHLCDep ? true : needsOHLC;
-      return (
-        prev +
-        `${appParam}(event, ${isOHLCDep ? "ohlc" : "[]"})${
-          i < finalIndex ? ", " : ""
-        }`
-      );
-    }, "");
+  // no params
+  if (appParams.length === 0) {
+    return [
+      appImportLine,
+      importDepsLine,
+      handlerLine,
+      callAppLine,
+      placeOrderLine,
+    ].join("\n");
+  }
+  const indicatorsImport = require(indicatorsPath);
 
-    const imports = appParams.reduce(
-      (prev, appParam) => prev + ", " + appParam,
-      needsOHLC ? ", OHLC" : ""
-    );
+  const hasOHLCRaw = appParams.some((appParam) => appParam === "OHLC");
+  const OHLCDeps = appParams.filter(
+    (appParam) => indicatorsImport[appParam + "_OHLC"]
+  );
+  const nonOHLCDeps = appParams.filter(
+    (appParam) => !indicatorsImport[appParam + "_OHLC"]
+  );
 
-    const indicatorObj = appParams.reduce((prev, appParam, i) => {
-      return prev + `${appParam}: indicatorArray[${i}],\n`;
-    }, "");
-
-    handler = `
-    import App from '../src/App';
-    import { placeOrder${imports} } from '../decltr/src/index';
-  
-    export const handler = async (event) => {
-      ${needsOHLC ? "const ohlc = await OHLC(event, [])" : ""}
-      const indicatorArray = await Promise.all([${parallelFetches}]);
-      const indicators = {
-        ${indicatorObj}
-      };
-      const order = App(indicators, event);
-      if (!order) {
-        return null;
-      }
-      return await placeOrder(order, "${KRAKEN_API_KEY}", "${KRAKEN_PRIVATE_KEY}");
-    };
-    `;
+  // no ohlc based params
+  if (OHLCDeps.length === 0) {
+    importDepsLine = `import { ${constantImports}, ${appParams.join(
+      ", "
+    )} } from '../decltr/src/index';`;
+    callDepsLine = `const indicatorArr = await Promise.all([${appParams.join(
+      "(event, []), "
+    )}(event, [])]);`;
+    indicatorsObjLine = `const indicators = {${appParams.reduce(
+      (prev, appParam, i) => prev + `\n${appParam}: indicatorArr[${i}],`,
+      ""
+    )}}`;
+    callAppLine = `const order = App(indicators, event);`;
+    return [
+      appImportLine,
+      importDepsLine,
+      handlerLine,
+      callDepsLine,
+      indicatorsObjLine,
+      callAppLine,
+      placeOrderLine,
+    ].join("\n");
   }
 
-  await fs.promises.writeFile(indexPath, handler, "utf-8");
+  // only ohlc based params
+  if (nonOHLCDeps.length === 0 || (hasOHLCRaw && nonOHLCDeps.length === 1)) {
+    importDepsLine = `import { ${constantImports}, ${appParams.join(
+      ", "
+    )} } from '../decltr/src/index';`;
+    callDepsLine = `const ohlc = await OHLC(event, []);\nconst indicatorArr = await Promise.all([${OHLCDeps.join(
+      "(event, ohlc), "
+    )}(event, ohlc)]);`;
+    indicatorsObjLine =
+      `const indicators = {${OHLCDeps.reduce(
+        (prev, appParam, i) => prev + `\n${appParam}: indicatorArr[${i}],`,
+        ""
+      )}` + (hasOHLCRaw ? "ohlc};" : "};");
+    callAppLine = `const order = App(indicators, event);`;
+    return [
+      appImportLine,
+      importDepsLine,
+      handlerLine,
+      callDepsLine,
+      indicatorsObjLine,
+      callAppLine,
+      placeOrderLine,
+    ].join("\n");
+  }
+
+  // mixed
+
+  importDepsLine = `import { ${constantImports}, ${appParams.join(", ")}${
+    !hasOHLCRaw && OHLCDeps.length > 0 ? ", OHLC" : ""
+  } } from '../decltr/src/index';`;
+  const nonOHLCDepsWithoutOHLC = nonOHLCDeps.filter(
+    (appParam) => appParam !== "OHLC"
+  );
+  const parallizedOHLC =
+    OHLCDeps.length > 1
+      ? `OHLC(event, []).then(ohlc => Promise.all([${OHLCDeps.join(
+          "(event, ohlc), "
+        )}(event, ohlc), ${hasOHLCRaw ? "ohlc" : ""}]))`
+      : `OHLC(event, []).then(ohlc => ${OHLCDeps[0]}(event, ohlc))`;
+
+  callDepsLine = `const indicatorArr = await Promise.all([${nonOHLCDepsWithoutOHLC.join(
+    "(event, []), "
+  )}(event, []), ${parallizedOHLC}])`;
+  indicatorsObjLine = `const indicators = {
+    ${nonOHLCDepsWithoutOHLC.reduce(
+      (prev, appParam, i) => prev + `\n${appParam}: indicatorArr[${i}],`,
+      ""
+    )}
+    ${
+      OHLCDeps.length > 1
+        ? OHLCDeps.reduce(
+            (prev, appParam, i) =>
+              prev +
+              `\n${appParam}: indicatorArr[${nonOHLCDepsWithoutOHLC.length}][${i}],`,
+            ""
+          )
+        : `${OHLCDeps[0]}: indicatorArr[${nonOHLCDepsWithoutOHLC.length}]`
+    }
+    ${
+      hasOHLCRaw
+        ? `OHLC: indicatorArr[${nonOHLCDepsWithoutOHLC.length}][${OHLCDeps.length}]`
+        : ""
+    }
+  }`;
+  callAppLine = `const order = App(indicators, event);`;
+
+  return [
+    appImportLine,
+    importDepsLine,
+    handlerLine,
+    callDepsLine,
+    indicatorsObjLine,
+    callAppLine,
+    placeOrderLine,
+  ].join("\n");
+
+  return "";
 };
 
 export default createHandler;
