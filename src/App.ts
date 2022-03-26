@@ -6,6 +6,8 @@ const App: FC = ({ assetPair, ticker }, { pair, volume, profit }) => {
   const vl = parseFloat(volume);
   const sellingPrice = (prf + ask * vl * 1.0026) / (vl * 0.9974);
 
+  // asdasdf
+
   return {
     pair,
     volume: vl.toFixed(assetPair.pair_decimals),

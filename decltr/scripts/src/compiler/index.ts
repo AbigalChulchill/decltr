@@ -6,6 +6,8 @@ import createHandlerCode from "./createHandlerCode";
 import getAppParams from "./getAppParams";
 import zipFile from "./zipFile";
 
+import { KRAKEN_API_KEY, KRAKEN_PRIVATE_KEY } from "../env";
+
 import {
   appPath,
   buildDir,
@@ -40,6 +42,22 @@ const compiler = async () => {
     minifyWhitespace: true,
     outfile: handlerJSPath,
     platform: "node",
+    plugins: [
+      {
+        name: "secrets-inliner",
+        setup: (build) => {
+          build.onResolve({ filter: /secrets$/ }, (args) => ({
+            path: args.path,
+            namespace: "secrets-ns",
+          }));
+
+          build.onLoad({ filter: /secrets$/, namespace: "secrets-ns" }, () => ({
+            contents: JSON.stringify({ KRAKEN_API_KEY, KRAKEN_PRIVATE_KEY }),
+            loader: "json",
+          }));
+        },
+      },
+    ],
     target: "node14",
     treeShaking: true,
     tsconfig: tsconfigPath,
@@ -75,3 +93,5 @@ export const compileLocalApp = async () => {
 
   return appParams;
 };
+
+export { checkAppParams };

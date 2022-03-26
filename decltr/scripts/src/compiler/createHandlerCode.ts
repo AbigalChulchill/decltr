@@ -19,7 +19,7 @@ const createHandlerCode = (appParams: Array<string>) => {
     const freeDeps = appParams.filter(
       (pm) => pm !== "OHLC" && !indicatorImport[pm + "_OHLC"]
     );
-    const ohlcRaw = appParams.some((pm) => pm === "OHLC");
+    const ohlcRaw = appParams.includes("OHLC");
 
     const struct: Struct = {
       ohlcDeps,
