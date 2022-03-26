@@ -2,7 +2,7 @@ import needle from "needle";
 import { rsi, macd } from "technicalindicators";
 import { MACDOutput } from "technicalindicators/declarations/moving_averages/MACD";
 
-import { TOHLCVVC } from "../types";
+import { TOHLCVVC } from "./types";
 
 import {
   AssetPair,
@@ -12,7 +12,7 @@ import {
   KrakenOHLC,
   KrakenTicker,
   Ticker,
-} from "../types";
+} from "./types";
 
 export const assetPair: Indicator<AssetPair> = async ({ pair }) => {
   const url = `https://api.kraken.com/0/public/AssetPairs?pair=${pair}`;
@@ -58,7 +58,7 @@ export const RSI: Indicator<Array<number>> = async (_, OHLC) => {
     period: 14,
   });
 };
-// Indicate If There Are Any Dependencies
+
 export const RSI_OHLC: OHLCDependent = true;
 
 export const MACD: Indicator<Array<MACDOutput>> = async (_, OHLC) => {

@@ -1,6 +1,6 @@
-import { DecltrApp } from "../decltr/src/types";
+import { FC } from "../decltr/lib/src/types";
 
-const App: DecltrApp = ({ assetPair, ticker }, { pair, volume, profit }) => {
+const App: FC = ({ assetPair, ticker }, { pair, volume, profit }) => {
   const ask = parseFloat(ticker.a[0]);
   const prf = parseFloat(profit);
   const vl = parseFloat(volume);
