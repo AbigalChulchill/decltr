@@ -1,91 +1,149 @@
-import { indicatorsPath } from "../env";
+import { decltrLibSrc, appPath, indicatorsPath } from "../env";
+
+interface Struct {
+  ohlcDeps: Array<string>;
+  freeDeps: Array<string>;
+  ohlcRaw: Boolean;
+}
 
 const createHandlerCode = (appParams: Array<string>) => {
+  let imports = "";
+  let body = "";
+
   if (appParams.length === 0) {
-    return `
-    import { placeOrder } from "../decltr/lib/src";
-    import App from "../src/App";
-    
-    export const handler = async (event) => {
-      const order = App();
+    imports = "placeOrder";
+    body = "const order = App({}, event);";
+  } else {
+    const indicatorImport = require(indicatorsPath);
+    const ohlcDeps = appParams.filter((pm) => indicatorImport[pm + "_OHLC"]);
+    const freeDeps = appParams.filter(
+      (pm) => pm !== "OHLC" && !indicatorImport[pm + "_OHLC"]
+    );
+    const ohlcRaw = appParams.some((pm) => pm === "OHLC");
 
-      if (!order) {
-        return order;
-      }
-      
-      return await placeOrder(order); 
+    const struct: Struct = {
+      ohlcDeps,
+      freeDeps,
+      ohlcRaw,
     };
-    `;
+
+    imports = getImports(struct);
+    body = getBody(struct);
   }
-
-  const indicatorsImport = require(indicatorsPath);
-
-  const imports = appParams.join(", ");
-
-  const ohlcDeps = appParams.filter(
-    (appParam) => indicatorsImport[appParam + "_OHLC"]
-  );
-  const nonDeps = appParams.filter(
-    (appParam) => !indicatorsImport[appParam + "_OHLC"]
-  );
-  // const ohlcRaw = appParams.some((appParam) => appParam === "OHLC");
-
-  if (ohlcDeps.length === 0) {
-    const indicatorsArr = `const indicatorsArr = await Promise.all([
-      ${nonDeps.join("(event, []), ") + "(event, [])"}
-    ])`;
-    const order = `const order = App({
-      ${nonDeps.reduce(
-        (prev, appParam, i) => `${prev}${appParam}: indicatorsArr[${i}],\n`,
-        ""
-      )}
-    })`;
-
-    return `
-    import { placeOrder, ${imports} } from "../decltr/lib/src";
-    import App from "../src/App";
-    
-    export const handler = async (event) => {
-      ${indicatorsArr};
-      ${order};
-
-      if (!order) {
-        return order;
-      }
-      
-      return await placeOrder(order); 
-    };
-    `;
-  }
-
-  const nonDepsWithoutOHLC = nonDeps.filter((appParam) => appParam !== "OHLC");
-
-  const nonDepsIndicatorArr =
-    nonDepsWithoutOHLC.join("(event, []), ") +
-    (nonDepsWithoutOHLC.length > 0 ? "(event, [])" : "");
-  // const depsIndicatorsArr = `OHLC(event, []).then(ohlc => Promise.all([
-  //   ${ohlcDeps.join("(event, ohlc), ") + "(event, ohlc)"}
-  // ]))`
-
-  const indicatorsArr = `const indicatorsArr = await Promise.all(${nonDepsIndicatorArr})`;
-
-  const order = "";
 
   return `
-  import { placeOrder, ${imports} } from "../decltr/lib/src";
-  import App from "../src/App";
-
-  export const handler = async () => {
-    ${indicatorsArr};
-    ${order}
-
-    if (!order) {
-      return order;
-    }
+    import { ${imports} } from "${decltrLibSrc}";
+    import App from "${appPath.split(".ts")[0]}";
     
-    return await placeOrder(order); 
-  };
-  `;
+    export const handler = async (event) => {
+      ${body}
+
+      if (!order) {
+        return order;
+      }
+      
+      return await placeOrder(order); 
+    };
+    `;
 };
 
 export default createHandlerCode;
+
+const getImports = (struct: Struct) => {
+  let imports = "placeOrder";
+
+  if (struct.freeDeps.length > 0) {
+    imports += ", " + struct.freeDeps.join(", ");
+  }
+
+  if (struct.ohlcDeps.length > 0) {
+    imports += ", " + struct.ohlcDeps.join(", ");
+  }
+
+  if (struct.ohlcRaw || struct.ohlcDeps.length > 0) {
+    imports += ", OHLC";
+  }
+
+  return imports;
+};
+
+const getIndicatorObj = (struct: Struct) => {
+  let indicatorObj = "";
+
+  if (struct.freeDeps.length > 0) {
+    indicatorObj += struct.freeDeps.reduce(
+      (prev, pm, i) => prev + `${pm}: indicatorArr[${i}],\n`,
+      ""
+    );
+  }
+  if (struct.ohlcDeps.length === 0 && struct.ohlcRaw) {
+    indicatorObj += `OHLC: indicatorArr[${struct.freeDeps.length}]`;
+  }
+  if (struct.ohlcDeps.length > 0 && !struct.ohlcRaw) {
+    if (struct.ohlcDeps.length === 1) {
+      indicatorObj += `${struct.ohlcDeps[0]}: indicatorArr[${struct.freeDeps.length}]`;
+    } else {
+      indicatorObj += struct.ohlcDeps.reduce(
+        (prev, pm, i) =>
+          prev + `${pm}: indicatorArr[${struct.freeDeps.length}][${i}],\n`,
+        ""
+      );
+    }
+  }
+  if (struct.ohlcDeps.length > 0 && struct.ohlcRaw) {
+    indicatorObj += struct.ohlcDeps.reduce(
+      (prev, pm, i) =>
+        prev + `${pm}: indicatorArr[${struct.freeDeps.length}][${i}],\n`,
+      ""
+    );
+    indicatorObj += `OHLC: indicatorArr[${struct.freeDeps.length}][${struct.ohlcDeps.length}],\n`;
+  }
+
+  return indicatorObj;
+};
+
+const getBody = (struct: Struct) => {
+  let indicatorArr = "";
+
+  if (struct.freeDeps.length > 0) {
+    indicatorArr += struct.freeDeps.join("(event, []), ") + "(event, [])";
+  }
+  if (struct.ohlcDeps.length === 0 && struct.ohlcRaw) {
+    indicatorArr += (indicatorArr === "" ? "" : ", ") + "OHLC(event, [])";
+  }
+  if (struct.ohlcDeps.length > 0 && !struct.ohlcRaw) {
+    if (struct.ohlcDeps.length === 1) {
+      indicatorArr +=
+        (indicatorArr === "" ? "" : ", ") +
+        `OHLC(event, []).then(ohlc => ${struct.ohlcDeps[0]}(event, ohlc))`;
+    } else {
+      const ohlcIndicatorArr =
+        struct.ohlcDeps.join("(event, ohlc), ") + "(event, ohlc)";
+      indicatorArr +=
+        (indicatorArr === "" ? "" : ", ") +
+        `OHLC(event, []).then(ohlc => Promise.all([
+      ${ohlcIndicatorArr}
+    ]))`;
+    }
+  }
+  if (struct.ohlcDeps.length > 0 && struct.ohlcRaw) {
+    const ohlcIndicatorArr =
+      struct.ohlcDeps.join("(event, ohlc), ") + "(event, ohlc)";
+    indicatorArr +=
+      (indicatorArr === "" ? "" : ", ") +
+      `OHLC(event, []).then(ohlc => Promise.all([
+      ${ohlcIndicatorArr}, ohlc
+    ]))`;
+  }
+
+  const indicatorObj = getIndicatorObj(struct);
+
+  return `const indicatorArr = await Promise.all([
+    ${indicatorArr}
+  ]);
+  const indicatorObj = {
+    ${indicatorObj}
+  };
+  const order = App(indicatorObj, event);
+  `;
+};
