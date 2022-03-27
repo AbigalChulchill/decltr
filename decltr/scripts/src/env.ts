@@ -12,6 +12,8 @@ export const indicatorsPath = path.resolve(
   cwd,
   "./decltr/lib/dist/indicators.js"
 );
+// public directory
+export const publicDir = path.resolve(cwd, "./decltr/scripts/public");
 
 // project directory
 export const tsconfigPath = path.resolve(cwd, "./tsconfig.json");

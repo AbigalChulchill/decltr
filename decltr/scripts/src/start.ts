@@ -1,8 +1,14 @@
-import chokidar from "chokidar";
+import http from "http";
 
-import { checkAppParams, compileLocalApp } from "./compiler";
-import { appPath, srcDir } from "./env";
-import { getIndicatorObjsRuntime, importFresh } from "./startUtils";
+import chokidar from "chokidar";
+import express from "express";
+import morgan from "morgan";
+import ws from "ws";
+
+import { updateApp, validateDevEventSchema } from "./startUtils";
+import { publicDir, srcDir } from "./env";
+
+import { DecltrDevEvent } from "../../lib/src/types";
 
 const nodeVersion = parseInt(process.versions.node.split(".")[0]);
 if (nodeVersion < 14) {
@@ -14,21 +20,56 @@ if (nodeVersion < 14) {
 
 const srcWatcher = chokidar.watch(srcDir, { ignoreInitial: true });
 
-srcWatcher.on("change", async () => {
-  try {
-    const appParams = await compileLocalApp();
-    checkAppParams(appParams);
-
-    const indicatorObjs = await getIndicatorObjsRuntime(appParams);
-
-    const App = importFresh<any>(appPath);
-
-    const results = indicatorObjs.map((indicatorObj) =>
-      App(indicatorObj, { pair: "ADAUSD", profit: ".01", volume: "20" })
-    );
-
-    console.log(results);
-  } catch (err) {
-    console.error(err);
-  }
+const webApp = express();
+webApp.use(morgan("dev"));
+webApp.use("/", express.static(publicDir));
+const httpServer = http.createServer(webApp);
+const wsServer = new ws.WebSocket.Server({
+  clientTracking: false,
+  noServer: true,
 });
+
+httpServer.on("upgrade", (req, socket, head) =>
+  wsServer.handleUpgrade(req, socket, head, (ws, wsReq) =>
+    wsServer.emit("connection", ws, wsReq)
+  )
+);
+
+wsServer.on("connection", (ws) => {
+  let event: DecltrDevEvent | null = null;
+
+  const listener = () =>
+    event &&
+    updateApp(event)
+      .then((res) =>
+        ws.send(JSON.stringify(res), (err) => err && ws.emit("error", err))
+      )
+      .catch((err) => ws.emit("error", err));
+
+  srcWatcher.on("change", listener);
+
+  ws.on("message", (ev) => {
+    try {
+      event = JSON.parse(ev.toString("utf-8"));
+      validateDevEventSchema(event);
+      listener();
+    } catch (err) {
+      ws.emit("error", err);
+    }
+  });
+
+  ws.on("error", (err) => {
+    ws.close();
+    console.error("WS /error 400", err);
+  });
+
+  ws.on("close", () => {
+    srcWatcher.removeListener("change", listener);
+    ws.removeAllListeners();
+    console.log("WS /close 200");
+  });
+
+  console.log("WS /open 200");
+});
+
+httpServer.listen(3000, () => console.log("Listening on port 3000!"));

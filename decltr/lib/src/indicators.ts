@@ -2,16 +2,15 @@ import needle from "needle";
 import { rsi, macd } from "technicalindicators";
 import { MACDOutput } from "technicalindicators/declarations/moving_averages/MACD";
 
-import { TOHLCVVC } from "./types";
-
 import {
   AssetPair,
-  OHLCDependent,
   Indicator,
   KrakenAssetPair,
   KrakenOHLC,
   KrakenTicker,
+  OHLCDependent,
   Ticker,
+  TOHLCVVC,
 } from "./types";
 
 export const assetPair: Indicator<AssetPair> = async ({ pair }) => {
