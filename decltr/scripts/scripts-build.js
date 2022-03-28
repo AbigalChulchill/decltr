@@ -31,7 +31,15 @@ const main = async () => {
       NodeResolve.default({
         extensions: [".ts", ".js"],
         onResolved: (resolved) => {
-          if (resolved.includes("node_modules")) {
+          if (
+            resolved.includes("node_modules") &&
+            !resolved.includes("node_modules/chalk")
+          ) {
+            return {
+              external: true,
+            };
+          }
+          if (resolved.startsWith("node:")) {
             return {
               external: true,
             };

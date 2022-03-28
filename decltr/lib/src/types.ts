@@ -7,22 +7,6 @@ export interface DecltrEvent {
   profit: string;
 }
 
-export interface DecltrDevEvent extends DecltrEvent {
-  /**
-   * The start time of the graph in dev tools
-   */
-  startTime: number;
-  /**
-   * The end time of the graph in dev tools
-   */
-  endTime: number;
-}
-
-export interface DecltrDevResult {
-  price: string;
-  App: Order | null;
-}
-
 export type FC = (indicators: Indicators, event: DecltrEvent) => Order | null;
 // end types from decltr platform
 
@@ -318,35 +302,12 @@ export type Indicator<T> = (
   OHLC: Array<TOHLCVVC>
 ) => Promise<T>;
 
-export type Indicator_DEV<T> = (
-  event: DecltrDevEvent,
-  OHLC: Array<TOHLCVVC>
-) => Promise<T>;
-
-export interface Fetcher_DEV_opts {
-  needsOHLC: boolean;
-  needsAssetPair: boolean;
-}
-
-export type Fetcher_DEV = (
-  event: DecltrDevEvent,
-  opts: Fetcher_DEV_opts
-) => Promise<Array<Indicators_DEV>>;
-
 export interface Indicators {
   assetPair: AssetPair;
   ticker: Ticker;
   RSI: Array<number>;
   OHLC: Array<TOHLCVVC>;
   MACD: Array<MACDOutput>;
-}
-
-export interface Indicators_DEV {
-  assetPair?: AssetPair;
-  ticker: Ticker;
-  RSI?: Array<number>;
-  OHLC?: Array<TOHLCVVC>;
-  MACD?: Array<MACDOutput>;
 }
 
 export type OHLCDependent = boolean | undefined;

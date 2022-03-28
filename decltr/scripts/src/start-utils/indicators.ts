@@ -1,34 +1,22 @@
 import needle from "needle";
 
-import { assetPair, MACD, RSI } from "./indicators";
+import { Fetcher_DEV, Indicator_DEV } from "../types";
 
-import {
-  Fetcher_DEV,
-  Indicator_DEV,
-  KrakenOHLC,
-  Ticker,
-  TOHLCVVC,
-} from "./types";
-
-/*
-
-MOVE THIS FILE AND THE TYPE DEFS ENDING IN _DEV
-TO decltr/scripts/src
-
-THEY ARENT USED IN THE LIB, AND THE TYPE DEFS ARENT USED
-EITHER
-
-
-*/
+import { assetPair, MACD, RSI } from "../../../lib/src/indicators";
+import { KrakenOHLC, Ticker, TOHLCVVC } from "../../../lib/src/types";
 
 export const fetch_DEV: Fetcher_DEV = async (event, opts) => {
-  const [{ tickers, startTime }, assetPairs] = await Promise.all([
+  const [tickers, assetPairs, ohlcs] = await Promise.all([
     ticker_DEV(event, []),
     opts.needsAssetPair ? assetPair(event, []) : undefined,
+    opts.needsOHLC ? OHLC_DEV(event, []) : undefined,
   ]);
 
-  event.startTime = startTime;
-  const ohlcs = opts.needsOHLC ? await OHLC_DEV(event, []) : undefined;
+  if (ohlcs && tickers.length > ohlcs.length) {
+    tickers.length = ohlcs.length;
+  } else if (ohlcs && ohlcs.length > tickers.length) {
+    ohlcs.length = tickers.length;
+  }
 
   if (opts.needsOHLC) {
     return tickers.map((ticker) => {
@@ -54,10 +42,10 @@ export const fetch_DEV: Fetcher_DEV = async (event, opts) => {
   }));
 };
 
-export const ticker_DEV: Indicator_DEV<{
-  tickers: Array<Ticker>;
-  startTime: number;
-}> = async ({ pair, startTime }) => {
+export const ticker_DEV: Indicator_DEV<Array<Ticker>> = async ({
+  pair,
+  startTime,
+}) => {
   const url = `https://us-east-1.aws.data.mongodb-api.com/app/decltr-yidsu/endpoint/get_tickers?pair=${pair}&since=${startTime}`;
 
   const data = await needle("get", url)
@@ -77,7 +65,7 @@ export const ticker_DEV: Indicator_DEV<{
     );
   }
 
-  return { tickers, startTime: new Date(data[0].time).getTime() };
+  return tickers;
 };
 
 export const OHLC_DEV: Indicator_DEV<Array<TOHLCVVC>> = async ({

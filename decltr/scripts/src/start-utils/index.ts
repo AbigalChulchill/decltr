@@ -1,8 +1,10 @@
-import { checkAppParams, compileLocalApp } from "./compiler";
-import { indicatorsPath, localAppJSPath } from "./env";
+import chalk from "chalk";
 
-import { fetch_DEV } from "../../lib/src/indicators_DEV";
-import { DecltrDevEvent, DecltrDevResult } from "../../lib/src/types";
+import { checkAppParams, compileLocalApp } from "../compiler";
+import { indicatorsPath, localAppJSPath } from "../env";
+
+import { DecltrDevEvent, DecltrDevResult, HashMap } from "../types";
+import { fetch_DEV } from "./indicators";
 
 export const importFresh = <T = any>(
   filePath: string,
@@ -48,18 +50,13 @@ export const updateApp = async (event: DecltrDevEvent) => {
 };
 
 export const validateDevEventSchema = (event: any) => {
-  // improve this with types
-  // problem is, ts gets real mad
-  // when indexing, fuck you ts let
-  // me index everything with string!
-
-  const schema = {
+  const schema: HashMap = {
     pair: "string",
     volume: "string",
     profit: "string",
     startTime: "number",
     endTime: "number",
-  } as any;
+  };
 
   for (const elem in schema) {
     if (typeof event[elem] !== schema[elem]) {
@@ -73,4 +70,40 @@ export const validateDevEventSchema = (event: any) => {
       );
     }
   }
+
+  const currDate = new Date(event.startTime);
+  currDate.setSeconds(0);
+  currDate.setMilliseconds(0);
+  const mins = currDate.getMinutes();
+  const nearestFive = Math.floor(mins / 5) * 5;
+  const diff = mins - nearestFive;
+  event.startTime = event.startTime - diff * 60 * 1000;
 };
+
+export const logger = (method: string, route: string) => {
+  const start = new Date().getTime();
+  return (status: number, reason?: string) => {
+    const end = new Date().getTime();
+    const ms = end - start;
+    const timerDisplay =
+      ms < 500
+        ? chalk.green
+        : ms < 1000
+        ? chalk.blue
+        : ms < 1500
+        ? chalk.yellow
+        : chalk.red;
+    const crayon =
+      status === 200 ? chalk.green : status >= 400 ? chalk.red : chalk.blue;
+    console.log(
+      method,
+      route,
+      crayon(status),
+      "-",
+      timerDisplay(`${ms}ms`),
+      `- ${reason ? reason : ""}`
+    );
+  };
+};
+
+export * from "./indicators";
